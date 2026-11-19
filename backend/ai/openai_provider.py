@@ -1,5 +1,8 @@
 import json
-from typing import Any
+import base64
+import os
+from pathlib import Path
+from typing import Any, Optional
 from backend.ai.provider_base import AIProviderBase
 
 class OpenAIProvider(AIProviderBase):
@@ -13,9 +16,11 @@ class OpenAIProvider(AIProviderBase):
 
     def _get_client(self, api_key: str):
         from openai import OpenAI
-        return OpenAI(api_key=api_key, timeout=20.0)
+        return OpenAI(api_key=api_key, timeout=25.0)
 
     def test_connection(self, api_key: str, model: str) -> tuple[bool, str]:
+        if not api_key:
+            return False, "OpenAI API key is empty."
         try:
             client = self._get_client(api_key)
             completion = client.chat.completions.create(
@@ -35,6 +40,7 @@ class OpenAIProvider(AIProviderBase):
             return False, f"OpenAI connection failed: {err_msg[:200]}"
 
     def extract_structured_facts(self, text: str, api_key: str, model: str) -> dict[str, Any]:
+        """Extract structured entities, dates, locations and key claims from text context."""
         prompt = f"""You are a digital forensics fact extractor.
 Analyze the reference text and output valid JSON only:
 {{
@@ -63,6 +69,7 @@ Context:
             return {}
 
     def compare_claims(self, text: str, reference: str, api_key: str, model: str) -> list[dict[str, Any]]:
+        """Compare evidence text against ground-truth reference context to identify contradictions."""
         prompt = f"""You are a digital forensics claim verification analyst.
 Compare the evidence text against the ground truth reference context.
 Output JSON format:
@@ -79,10 +86,10 @@ Output JSON format:
   ]
 }}
 
-Reference Context:
+Reference:
 \"\"\"{reference}\"\"\"
 
-Evidence Text:
+Evidence:
 \"\"\"{text}\"\"\"
 """
         try:
@@ -91,12 +98,67 @@ Evidence Text:
                 model=model or "gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
-                max_tokens=800
+                max_tokens=1000
             )
             data = json.loads(completion.choices[0].message.content or "{}")
             return data.get("comparisons", [])
         except Exception:
             return []
+
+    def inspect_visual_context(self, image_path: str, api_key: str, model: str) -> dict[str, Any]:
+        """Multimodal visual inspection using gpt-4o vision."""
+        try:
+            from PIL import Image
+            import io
+            client = self._get_client(api_key)
+            
+            with Image.open(image_path) as pil_img:
+                pil_img.thumbnail((512, 512))
+                buf = io.BytesIO()
+                pil_img.convert("RGB").save(buf, format="JPEG", quality=80)
+                b64_img = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+            prompt = (
+                "You are a digital forensics visual analyst. Inspect this image. "
+                "Describe visible key objects, scene setting, environmental lighting, visible signage or text, "
+                "and identifiable landmarks. Provide objective observations only. "
+                "Do NOT proclaim whether the image is authentic or fake. Respond in 2-3 sentences."
+            )
+            response = client.chat.completions.create(
+                model=model or "gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
+                        ]
+                    }
+                ],
+                max_tokens=300
+            )
+            return {
+                "visual_summary": response.choices[0].message.content or "",
+                "model": model or "gpt-4o-mini"
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+    def inspect_audio_context(self, audio_path: str, api_key: str, model: str) -> dict[str, Any]:
+        """Audio context transcription using whisper-1."""
+        try:
+            client = self._get_client(api_key)
+            with open(audio_path, "rb") as audio_file:
+                transcription = client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file
+                )
+            return {
+                "transcription": getattr(transcription, "text", "") or "",
+                "model": "whisper-1"
+            }
+        except Exception as e:
+            return {"error": str(e)}
 
     def generate_investigation_summary(self, investigation_data: dict, api_key: str, model: str) -> str:
         prompt = f"""You are a senior digital forensics lead drafting an executive summary.
@@ -114,7 +176,7 @@ Data:
             completion = client.chat.completions.create(
                 model=model or "gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=400
+                max_tokens=500
             )
             return completion.choices[0].message.content or ""
         except Exception as e:

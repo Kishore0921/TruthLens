@@ -137,7 +137,7 @@ export default function Settings() {
         </div>
       )}
 
-      {/* Security Architecture & Env Notice Banner */}
+      {/* Mandatory Administrator Configuration Notice */}
       <div className="bg-slate-900/90 border border-cyan-900/40 rounded-xl p-5 shadow-sm">
         <div className="flex items-start gap-3.5">
           <div className="p-2 rounded-lg bg-cyan-950/80 border border-cyan-800/60 text-cyan-400 mt-0.5">
@@ -150,56 +150,73 @@ export default function Settings() {
                 backend/.env
               </span>
             </h4>
-            <p className="text-slate-400 leading-relaxed">
-              In accordance with zero-trust security standards, API keys are <strong>never entered or stored through the browser interface</strong>.
-              All credentials (<code className="text-cyan-300 font-mono">GEMINI_API_KEY</code>, <code className="text-cyan-300 font-mono">OPENAI_API_KEY</code>, <code className="text-cyan-300 font-mono">ANTHROPIC_API_KEY</code>, <code className="text-cyan-300 font-mono">HF_TOKEN</code>)
-              are configured by the system administrator directly in the backend environment file and loaded on startup.
+            <p className="text-slate-300 leading-relaxed font-medium">
+              "AI providers are configured securely by the application administrator through the backend environment file. API credentials are never entered or exposed through the frontend."
+            </p>
+            <p className="text-slate-400 leading-relaxed mt-1">
               TruthLens performs full reference-independent digital forensics offline even when all cloud providers are unconfigured.
+              Local signal forensics (2D-FFT frequency domain analysis, sensor noise variance, ELA, pHash, and acoustic spectral inspection) remain 100% operational.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Provider Cards */}
+      {/* Provider Status Summary Table */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold uppercase tracking-wider font-mono text-slate-400 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-cyan-400" />
-            Configured AI Reasoning Providers
-          </h3>
-          <span className="text-xs font-mono text-slate-500">
-            Source: <code className="text-slate-400">backend/.env</code>
-          </span>
-        </div>
+        <h3 className="text-sm font-semibold uppercase tracking-wider font-mono text-slate-400 flex items-center gap-2">
+          <Server className="w-4 h-4 text-cyan-400" />
+          AI Provider Configuration Status
+        </h3>
 
-        {loading ? (
-          <div className="p-8 text-center text-xs font-mono text-slate-500 bg-slate-900/50 rounded-xl border border-slate-800">
-            Scanning provider configurations...
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {providers.map((p) => {
-              const result = testResults[p.id];
-              const isTesting = testingId === p.id;
+        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-300">
+              <thead className="bg-slate-950/80 text-[11px] font-mono uppercase tracking-wider text-slate-400 border-b border-slate-800">
+                <tr>
+                  <th className="py-3 px-4">Provider</th>
+                  <th className="py-3 px-4">Configuration Source</th>
+                  <th className="py-3 px-4">Execution Target</th>
+                  <th className="py-3 px-4">Active Model</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800 font-sans">
+                {providers.map((p) => {
+                  const result = testResults[p.id];
+                  const isTesting = testingId === p.id;
 
-              return (
-                <div
-                  key={p.id}
-                  className={`bg-slate-900 border rounded-xl p-5 transition-all shadow-sm flex flex-col justify-between ${
-                    p.has_key ? 'border-slate-700' : 'border-slate-800/80 bg-slate-900/60'
-                  }`}
-                >
-                  <div>
-                    {/* Header */}
-                    <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-800">
-                      <div>
-                        <h4 className="font-semibold text-white text-base">{p.provider_name}</h4>
-                        <p className="text-xs text-slate-400 font-mono">Provider ID: {p.id}</p>
-                      </div>
-
-                      <div className="flex items-center gap-2">
+                  return (
+                    <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-white">{p.provider_name}</div>
+                        <div className="text-[10px] text-slate-500 font-mono">ID: {p.id}</div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="font-mono text-[11px] text-cyan-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                          Backend .env
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-400 text-xs font-mono">
+                        {p.execution_type || (p.id === 'huggingface' ? 'Local CPU / Hub' : 'Cloud Reasoning')}
+                      </td>
+                      <td className="py-3 px-4">
+                        <select
+                          value={p.selected_model}
+                          onChange={(e) => handleModelChange(p.id, e.target.value)}
+                          disabled={!p.has_key}
+                          className="bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-xs font-mono text-slate-200 focus:outline-none focus:border-cyan-500 disabled:opacity-40"
+                        >
+                          {p.available_models.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="py-3 px-4">
                         <span
-                          className={`text-[11px] px-2.5 py-1 rounded-full font-mono border flex items-center gap-1.5 ${
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono border ${
                             p.has_key
                               ? 'bg-emerald-950/60 border-emerald-800 text-emerald-400'
                               : 'bg-slate-950 border-slate-800 text-slate-500'
@@ -210,109 +227,49 @@ export default function Settings() {
                               p.has_key ? 'bg-emerald-400' : 'bg-slate-600'
                             }`}
                           ></span>
-                          {p.has_key ? 'Configured in .env' : 'Unset in .env'}
+                          {p.has_key ? 'Configured' : 'Missing'}
                         </span>
-                      </div>
-                    </div>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleToggleEnable(p.id, p.is_enabled)}
+                            disabled={!p.has_key}
+                            className={`text-xs px-2.5 py-1 rounded font-medium transition-colors border ${
+                              p.is_enabled
+                                ? 'bg-cyan-600/20 text-cyan-400 border-cyan-800 hover:bg-cyan-600/30'
+                                : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-slate-700'
+                            } ${!p.has_key ? 'cursor-not-allowed opacity-40' : ''}`}
+                          >
+                            {p.is_enabled ? 'Enabled' : 'Disabled'}
+                          </button>
 
-                    {/* Status & Model Selection */}
-                    <div className="mt-4 space-y-3">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-400">Environment Status:</span>
-                        <span className="font-mono text-slate-300">
-                          {p.has_key ? (
-                            <span className="text-emerald-400 font-medium flex items-center gap-1">
-                              <Check className="w-3.5 h-3.5" /> Key Loaded ({p.masked_key})
-                            </span>
-                          ) : (
-                            <span className="text-slate-500">Unconfigured (Offline Fallback)</span>
-                          )}
-                        </span>
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-semibold text-slate-300 block mb-1">
-                          Active Model
-                        </label>
-                        <select
-                          value={p.selected_model}
-                          onChange={(e) => handleModelChange(p.id, e.target.value)}
-                          disabled={!p.has_key}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-cyan-500 disabled:opacity-50"
-                        >
-                          {p.available_models.map((m) => (
-                            <option key={m} value={m}>
-                              {m}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions & Test Result */}
-                  <div className="mt-4 pt-3 border-t border-slate-800/80 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleToggleEnable(p.id, p.is_enabled)}
-                        disabled={!p.has_key}
-                        className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors border ${
-                          p.is_enabled
-                            ? 'bg-cyan-600/20 text-cyan-400 border-cyan-800 hover:bg-cyan-600/30'
-                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-slate-700'
-                        } ${!p.has_key ? 'cursor-not-allowed opacity-40' : ''}`}
-                      >
-                        {p.is_enabled ? 'Enabled' : 'Disabled'}
-                      </button>
-
-                      <button
-                        onClick={() => handleTestConnection(p.id)}
-                        disabled={isTesting || !p.has_key}
-                        className="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 font-medium text-xs transition-colors flex items-center justify-center gap-1.5 border border-slate-700"
-                      >
-                        {isTesting ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
-                            Verifying...
-                          </>
-                        ) : (
-                          <>
-                            <Server className="w-3.5 h-3.5 text-slate-400" />
-                            Verify Connection
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    {result && (
-                      <div
-                        className={`p-2.5 rounded-lg text-xs flex items-start gap-2 ${
-                          result.success
-                            ? 'bg-emerald-950/40 border border-emerald-900/60 text-emerald-300'
-                            : 'bg-red-950/40 border border-red-900/60 text-red-300'
-                        }`}
-                      >
-                        {result.success ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                        ) : (
-                          <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
-                        )}
-                        <div>
-                          <p className="font-semibold text-[11px]">{result.message}</p>
-                          {result.model_used && (
-                            <p className="font-mono text-[10px] text-slate-400 mt-0.5">
-                              Model: {result.model_used}
-                            </p>
-                          )}
+                          <button
+                            onClick={() => handleTestConnection(p.id)}
+                            disabled={isTesting || !p.has_key}
+                            className="py-1 px-2.5 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 font-medium text-xs transition-colors inline-flex items-center gap-1.5 border border-slate-700"
+                          >
+                            {isTesting ? (
+                              <RefreshCw className="w-3 h-3 animate-spin text-cyan-400" />
+                            ) : (
+                              <Server className="w-3 h-3 text-slate-400" />
+                            )}
+                            Test
+                          </button>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                        {result && (
+                          <div className={`mt-1.5 text-[10px] text-right ${result.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {result.message}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Pretrained Forensic Model Registry */}
@@ -364,13 +321,6 @@ export default function Settings() {
                     </td>
                   </tr>
                 ))}
-                {(!systemHealth?.models || systemHealth.models.length === 0) && (
-                  <tr>
-                    <td colSpan="6" className="py-6 text-center text-slate-500 font-mono text-xs">
-                      Registry loading...
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>

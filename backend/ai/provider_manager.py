@@ -2,46 +2,54 @@ from typing import Any
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from backend.models import AIProviderConfig, AIUsageLog
-from backend.ai.secret_manager import mask_secret
 from backend.ai.gemini_provider import GeminiProvider
 from backend.ai.openai_provider import OpenAIProvider
 from backend.ai.anthropic_provider import AnthropicProvider
 from backend.ai.huggingface_provider import HuggingFaceProvider
 from backend.config import (
-    GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, HF_TOKEN,
+    HF_TOKEN, GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY,
+    ENABLE_HUGGINGFACE, ENABLE_GEMINI, ENABLE_OPENAI,
     GEMINI_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL, ANTHROPIC_DEFAULT_MODEL, HF_DEFAULT_MODEL,
-    EXECUTION_MODE
+    AI_EXECUTION_MODE, EXECUTION_MODE
 )
 
 _PROVIDERS = {
+    "huggingface": HuggingFaceProvider(),
     "gemini": GeminiProvider(),
     "openai": OpenAIProvider(),
     "anthropic": AnthropicProvider(),
-    "huggingface": HuggingFaceProvider(),
 }
 
-def get_env_credentials_map() -> dict[str, dict[str, str]]:
-    """Mapping of provider ID to its environment variables and default models."""
+def get_env_credentials_map() -> dict[str, dict[str, Any]]:
+    """Mapping of provider ID to its environment variables, enabled flags, and default models."""
     return {
+        "huggingface": {
+            "key": HF_TOKEN,
+            "is_enabled_flag": ENABLE_HUGGINGFACE,
+            "default_model": HF_DEFAULT_MODEL,
+            "name": "Hugging Face",
+            "execution": "Local CPU / Hub"
+        },
         "gemini": {
             "key": GEMINI_API_KEY,
+            "is_enabled_flag": ENABLE_GEMINI,
             "default_model": GEMINI_DEFAULT_MODEL,
-            "name": "Google Gemini"
+            "name": "Google Gemini",
+            "execution": "Cloud Reasoning"
         },
         "openai": {
             "key": OPENAI_API_KEY,
+            "is_enabled_flag": ENABLE_OPENAI,
             "default_model": OPENAI_DEFAULT_MODEL,
-            "name": "OpenAI"
+            "name": "OpenAI",
+            "execution": "Cloud Reasoning"
         },
         "anthropic": {
             "key": ANTHROPIC_API_KEY,
+            "is_enabled_flag": bool(ANTHROPIC_API_KEY),
             "default_model": ANTHROPIC_DEFAULT_MODEL,
-            "name": "Anthropic Claude"
-        },
-        "huggingface": {
-            "key": HF_TOKEN,
-            "default_model": HF_DEFAULT_MODEL,
-            "name": "Hugging Face"
+            "name": "Anthropic Claude",
+            "execution": "Cloud Reasoning"
         }
     }
 
@@ -56,21 +64,26 @@ def sync_env_providers_with_db(db: Session):
     env_map = get_env_credentials_map()
     for p_id, p_info in env_map.items():
         cfg = db.query(AIProviderConfig).filter(AIProviderConfig.id == p_id).first()
+        is_configured = bool(p_info["key"])
+        is_active = is_configured and p_info["is_enabled_flag"] and (AI_EXECUTION_MODE != "local")
+        
         if not cfg:
             cfg = AIProviderConfig(
                 id=p_id,
                 provider_name=p_info["name"],
                 selected_model=p_info["default_model"],
-                is_enabled=bool(p_info["key"]) and (EXECUTION_MODE != "LOCAL"),
-                connection_status="configured" if p_info["key"] else "not_configured"
+                is_enabled=is_active,
+                connection_status="configured" if is_configured else "not_configured"
             )
             db.add(cfg)
         else:
-            if p_info["key"] and cfg.connection_status == "not_configured":
+            if is_configured and cfg.connection_status == "not_configured":
                 cfg.connection_status = "configured"
-            elif not p_info["key"]:
+            elif not is_configured:
                 cfg.connection_status = "not_configured"
                 cfg.is_enabled = False
+            else:
+                cfg.is_enabled = is_active
     try:
         db.commit()
     except Exception:
@@ -91,19 +104,22 @@ def list_providers(db: Session) -> list[dict]:
         models = getattr(p_inst, "supported_models", getattr(p_inst, "available_models", [])) if p_inst else []
         selected = c.selected_model or p_info.get("default_model", models[0] if models else "")
         
+        # NEVER expose actual key or parts of it to frontend.
+        # masked_key is an empty or generic indicator token
         results.append({
             "id": c.id,
             "provider_name": c.provider_name,
             "has_key": has_key,
-            "masked_key": mask_secret(env_key) if has_key else "",
-            "is_enabled": bool(c.is_enabled) and has_key and (EXECUTION_MODE != "LOCAL"),
+            "masked_key": "Configured (backend/.env)" if has_key else "Missing in .env",
+            "is_enabled": bool(c.is_enabled) and has_key and (AI_EXECUTION_MODE != "local"),
             "selected_model": selected,
             "connection_status": c.connection_status if has_key else "not_configured",
             "last_tested_at": c.last_tested_at,
             "last_error": c.last_error,
             "available_models": models,
-            "config_source": "backend/.env" if has_key else "missing_in_env",
-            "execution_mode": EXECUTION_MODE
+            "config_source": "backend/.env",
+            "execution_mode": AI_EXECUTION_MODE.upper(),
+            "execution_type": p_info.get("execution", "Local / Cloud")
         })
     return results
 
@@ -128,9 +144,9 @@ def update_provider_config(
         cfg = AIProviderConfig(id=provider_id, provider_name=name)
         db.add(cfg)
 
-    # Note: api_key parameter is ignored as credentials must be set in .env
+    # API key parameter is intentionally ignored; credentials only reside in .env
     if is_enabled is not None:
-        cfg.is_enabled = bool(is_enabled) and bool(p_info.get("key"))
+        cfg.is_enabled = bool(is_enabled) and bool(p_info.get("key")) and p_info.get("is_enabled_flag", True)
 
     if selected_model is not None:
         cfg.selected_model = selected_model
@@ -160,7 +176,7 @@ def test_provider_connection(db: Session, provider_id: str) -> dict:
             "provider": provider_id,
             "success": False,
             "status": "not_configured",
-            "message": f"No credential found in backend/.env ({provider_id.upper()}_API_KEY is unset)."
+            "message": f"No credential configured in backend/.env ({provider_id.upper()}_API_KEY or HF_TOKEN is unset)."
         }
 
     p_inst = get_provider_instance(provider_id)
@@ -169,7 +185,7 @@ def test_provider_connection(db: Session, provider_id: str) -> dict:
             "provider": provider_id,
             "success": False,
             "status": "connection_failed",
-            "message": f"Provider {provider_id} is not supported."
+            "message": f"Provider '{provider_id}' is not supported."
         }
 
     cfg = db.query(AIProviderConfig).filter(AIProviderConfig.id == provider_id).first()
@@ -210,14 +226,14 @@ def test_provider_connection(db: Session, provider_id: str) -> dict:
 def get_active_provider_and_key(db: Session, provider_id: str) -> tuple[Any, str, str]:
     """
     Internal helper: returns (provider_instance, api_key_from_env, selected_model).
-    Returns (None, "", "") if execution mode is LOCAL, provider disabled, or key missing.
+    Returns (None, "", "") if execution mode is local, provider disabled, or key missing.
     """
-    if EXECUTION_MODE == "LOCAL":
+    if AI_EXECUTION_MODE == "local":
         return None, "", ""
 
     env_map = get_env_credentials_map()
     p_info = env_map.get(provider_id)
-    if not p_info or not p_info.get("key"):
+    if not p_info or not p_info.get("key") or not p_info.get("is_enabled_flag"):
         return None, "", ""
 
     cfg = db.query(AIProviderConfig).filter(AIProviderConfig.id == provider_id).first()

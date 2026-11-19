@@ -16,16 +16,22 @@ MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", "104857600"))  # 100 MB
 APP_SECRET_KEY = os.getenv("APP_SECRET_KEY", "truthlens-default-secret-key")
 FERNET_MASTER_KEY = os.getenv("FERNET_MASTER_KEY", "")
 
-# Execution mode: HYBRID (default), LOCAL (offline models only), CLOUD (external APIs only)
-EXECUTION_MODE = os.getenv("EXECUTION_MODE", "HYBRID").upper()
-if EXECUTION_MODE not in ["LOCAL", "CLOUD", "HYBRID"]:
-    EXECUTION_MODE = "HYBRID"
+# AI Configuration Flags & Execution Mode
+ENABLE_HUGGINGFACE = os.getenv("ENABLE_HUGGINGFACE", "true").lower() in ("true", "1", "yes")
+ENABLE_GEMINI = os.getenv("ENABLE_GEMINI", "true").lower() in ("true", "1", "yes")
+ENABLE_OPENAI = os.getenv("ENABLE_OPENAI", "true").lower() in ("true", "1", "yes")
+
+# Execution mode: hybrid (default), local (offline models only), cloud (external APIs only)
+AI_EXECUTION_MODE = os.getenv("AI_EXECUTION_MODE", os.getenv("EXECUTION_MODE", "hybrid")).lower()
+if AI_EXECUTION_MODE not in ["local", "cloud", "hybrid"]:
+    AI_EXECUTION_MODE = "hybrid"
+EXECUTION_MODE = AI_EXECUTION_MODE.upper()
 
 # Environment-based API credentials (configured manually in backend/.env)
+HF_TOKEN = os.getenv("HF_TOKEN", "").strip()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
-HF_TOKEN = os.getenv("HF_TOKEN", "").strip()
 
 # Default models
 GEMINI_DEFAULT_MODEL = os.getenv("GEMINI_DEFAULT_MODEL", "gemini-2.5-flash")

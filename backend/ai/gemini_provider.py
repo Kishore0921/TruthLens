@@ -1,5 +1,8 @@
 import json
-from typing import Any
+import base64
+import os
+from pathlib import Path
+from typing import Any, Optional
 from backend.ai.provider_base import AIProviderBase
 
 class GeminiProvider(AIProviderBase):
@@ -17,9 +20,10 @@ class GeminiProvider(AIProviderBase):
         return genai.Client(api_key=api_key)
 
     def test_connection(self, api_key: str, model: str) -> tuple[bool, str]:
+        if not api_key:
+            return False, "Google Gemini API key is empty."
         try:
             client = self._get_client(api_key)
-            # Lightweight test prompt
             response = client.models.generate_content(
                 model=model or "gemini-2.5-flash",
                 contents="Ping. Respond with word 'PONG'."
@@ -36,6 +40,7 @@ class GeminiProvider(AIProviderBase):
             return False, f"Gemini connection failed: {err_msg[:200]}"
 
     def extract_structured_facts(self, text: str, api_key: str, model: str) -> dict[str, Any]:
+        """Extract structured entities, dates, locations and key claims from text context."""
         prompt = f"""You are a digital forensics structured fact extractor.
 Analyze the following reference context and extract structured facts.
 Respond ONLY with a valid JSON object matching this schema:
@@ -65,6 +70,7 @@ Context:
             return {}
 
     def compare_claims(self, text: str, reference: str, api_key: str, model: str) -> list[dict[str, Any]]:
+        """Compare evidence text against ground-truth reference context to identify contradictions."""
         prompt = f"""You are a digital forensics claim verification analyst.
 Compare the evidence text against the ground truth reference context.
 Identify direct contradictions or strong corroborations.
@@ -97,6 +103,60 @@ Evidence Text:
             return json.loads(response.text)
         except Exception:
             return []
+
+    def inspect_visual_context(self, image_path: str, api_key: str, model: str) -> dict[str, Any]:
+        """Multimodal inspection: Describe scene, visible objects, signage, text, and contextual landmarks."""
+        try:
+            from PIL import Image
+            client = self._get_client(api_key)
+            with Image.open(image_path) as pil_img:
+                # Downscale to max 512px for bandwidth & efficiency
+                pil_img.thumbnail((512, 512))
+                prompt = (
+                    "You are a digital forensics visual analyst. Inspect this image. "
+                    "List visible key objects, scene setting, environmental lighting, visible signage or text, "
+                    "and identifiable landmarks. Provide objective observations only. "
+                    "Do NOT proclaim whether the image is authentic or fake. Respond in 2-3 sentences."
+                )
+                response = client.models.generate_content(
+                    model=model or "gemini-2.5-flash",
+                    contents=[pil_img, prompt]
+                )
+                return {
+                    "visual_summary": response.text or "",
+                    "model": model or "gemini-2.5-flash"
+                }
+        except Exception as e:
+            return {"error": str(e)}
+
+    def inspect_audio_context(self, audio_path: str, api_key: str, model: str) -> dict[str, Any]:
+        """Audio context inspection: transcribe speech and identify auditory context."""
+        try:
+            # Check file size before reading
+            size = os.path.getsize(audio_path)
+            if size > 10 * 1024 * 1024:
+                return {"note": "Audio file exceeds 10MB limit for cloud reasoning inspection"}
+            
+            client = self._get_client(api_key)
+            with open(audio_path, "rb") as f:
+                audio_bytes = f.read()
+
+            from google.genai import types
+            suffix = Path(audio_path).suffix.lower()
+            mime = "audio/wav" if suffix == ".wav" else "audio/mp3"
+
+            part = types.Part.from_bytes(data=audio_bytes, mime_type=mime)
+            prompt = "Transcribe the spoken words in this recording and summarize key claims made."
+            response = client.models.generate_content(
+                model=model or "gemini-2.5-flash",
+                contents=[part, prompt]
+            )
+            return {
+                "transcription": response.text or "",
+                "model": model or "gemini-2.5-flash"
+            }
+        except Exception as e:
+            return {"error": str(e)}
 
     def generate_investigation_summary(self, investigation_data: dict, api_key: str, model: str) -> str:
         prompt = f"""You are a senior digital forensics lead drafting an executive summary.
