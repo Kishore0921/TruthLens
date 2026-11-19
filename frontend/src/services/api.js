@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_BASE = '/api/v1';
+// Replace https://onrender.com with your actual Render backend URL
+const BACKEND_URL = import.meta.env.VITE_API_URL || 'https://truthlens-8okr.onrender.com';
+const API_BASE = `${BACKEND_URL.replace(/\/+$/, '')}/api/v1`;
 
 const client = axios.create({
   baseURL: API_BASE,
