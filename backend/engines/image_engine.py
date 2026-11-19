@@ -7,6 +7,7 @@ from pathlib import Path
 from backend.schemas import Finding, EvidenceLocation
 from backend.config import PROCESSED_DIR
 from backend.forensic.metadata import extract_image_metadata
+from backend.models_registry import ModelRegistry
 
 async def analyze_image(evidence_id: str, filepath: str, media_type: str) -> list[Finding]:
     findings: list[Finding] = []
@@ -215,5 +216,38 @@ async def analyze_image(evidence_id: str, filepath: str, media_type: str) -> lis
         ))
     except Exception:
         pass
+        
+    # 5. Pretrained / Reference-Independent Authenticity Models
+    registry = ModelRegistry.get_instance()
+    for task_name in ["ai_image_frequency_analysis", "sensor_noise_consistency"]:
+        adapters = registry.get_models_for_task(task_name)
+        for adapter in adapters:
+            try:
+                pred = await adapter.predict(filepath)
+                findings.append(Finding(
+                    finding_id=str(uuid.uuid4()),
+                    evidence_id=evidence_id,
+                    media_type="image",
+                    engine=adapter.model_id,
+                    indicator=pred.indicator,
+                    description=pred.description,
+                    location=EvidenceLocation(region=pred.details),
+                    model_score=pred.score,
+                    confidence_band=pred.confidence_band,
+                    limitations=pred.limitations
+                ))
+            except Exception as e:
+                findings.append(Finding(
+                    finding_id=str(uuid.uuid4()),
+                    evidence_id=evidence_id,
+                    media_type="image",
+                    engine=adapter.model_id,
+                    indicator="model_execution_error",
+                    description=f"Model {adapter.model_id} failed: {str(e)}",
+                    location=EvidenceLocation(),
+                    model_score=None,
+                    confidence_band="low",
+                    limitations=["Model inference failed gracefully"]
+                ))
         
     return findings

@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import NewInvestigation from './pages/NewInvestigation';
 import InvestigationDetail from './pages/InvestigationDetail';
+import Settings from './pages/Settings';
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/investigations/new" element={<NewInvestigation />} />
             <Route path="/investigations/:id" element={<InvestigationDetail />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

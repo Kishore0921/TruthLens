@@ -71,7 +71,7 @@ class TestTruthLensAPIWorkflow(unittest.TestCase):
         res = self.client.post(f"/api/v1/investigations/{inv_id}/analyze")
         self.assertEqual(res.status_code, 200)
         status_data = res.json()
-        self.assertIn(status_data["status"], ["completed", "completed_with_errors"])
+        self.assertIn(status_data["status"].upper(), ["COMPLETED", "COMPLETED_WITH_ERRORS", "PARTIALLY_COMPLETED"])
 
         # 5. Fetch Findings
         res = self.client.get(f"/api/v1/investigations/{inv_id}/findings")

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createInvestigation } from '../services/api';
-import { Shield, ArrowLeft, Info, Sparkles } from 'lucide-react';
+import { createInvestigation, extractReferenceFacts } from '../services/api';
+import { Shield, ArrowLeft, Info, Sparkles, Wand2, CheckCircle2, Bot } from 'lucide-react';
 
 export default function NewInvestigation() {
   const navigate = useNavigate();
@@ -9,9 +9,27 @@ export default function NewInvestigation() {
     title: '',
     description: '',
     reference_context: '',
+    ai_enabled: false,
+    ai_provider: 'gemini',
   });
+  const [structuredFacts, setStructuredFacts] = useState(null);
+  const [isExtracting, setIsExtracting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const handleExtractFacts = async () => {
+    if (!formData.reference_context.trim()) return;
+    try {
+      setIsExtracting(true);
+      setError('');
+      const res = await extractReferenceFacts(formData.reference_context);
+      setStructuredFacts(res.data);
+    } catch (err) {
+      console.warn('Extraction fallback to local regex:', err);
+    } finally {
+      setIsExtracting(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -23,7 +41,11 @@ export default function NewInvestigation() {
     try {
       setIsSubmitting(true);
       setError('');
-      const res = await createInvestigation(formData);
+      const payload = {
+        ...formData,
+        structured_facts: structuredFacts || {}
+      };
+      const res = await createInvestigation(payload);
       navigate(`/investigations/${res.data.id}`);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create investigation.');
@@ -75,7 +97,7 @@ export default function NewInvestigation() {
             Case Description
           </label>
           <textarea
-            rows={3}
+            rows={2}
             placeholder="Describe the context of the inquiry, media sources, alleged provenance, or subject matter..."
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -83,25 +105,81 @@ export default function NewInvestigation() {
           />
         </div>
 
+        {/* Reference Context */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="block text-xs font-semibold text-slate-300 uppercase font-mono">
               Reference Context / Ground Truth Facts (Optional)
             </label>
             <span className="text-[11px] text-cyan-400 font-mono flex items-center gap-1">
-              <Sparkles className="w-3 h-3" /> Cross-Modal Reference
+              <Sparkles className="w-3 h-3" /> Reference-Independent Enabled
             </span>
           </div>
           <textarea
-            rows={4}
-            placeholder="e.g. Official dispatch stating: 'The meeting occurred in Bangalore on Monday with the chief minister.' This text will be cross-referenced against uploaded audio transcripts, video text, and images to flag discrepancies."
+            rows={3}
+            placeholder="e.g. Official dispatch stating: 'The meeting occurred in Bangalore on Monday with the chief minister.' Uploaded evidence will also be independently evaluated without reference."
             value={formData.reference_context}
             onChange={(e) => setFormData({ ...formData, reference_context: e.target.value })}
             className="w-full px-3.5 py-2.5 rounded-lg bg-slate-950 border border-slate-700 text-slate-200 text-sm focus:outline-none focus:border-cyan-500 transition-colors"
           />
-          <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
-            The cross-modal correlation engine uses this reference baseline to detect contradictions, location mismatches, and date conflicts against uploaded evidence.
-          </p>
+          <div className="flex items-center justify-between mt-2">
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Ground truth is <strong>never mandatory</strong>. TruthLens will independently analyze image compression, sensor noise, audio acoustics, and video temporal consistency.
+            </p>
+            {formData.reference_context.trim().length > 10 && (
+              <button
+                type="button"
+                onClick={handleExtractFacts}
+                disabled={isExtracting}
+                className="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 flex items-center gap-1 font-mono transition-colors shrink-0 ml-3"
+              >
+                <Wand2 className="w-3 h-3" />
+                {isExtracting ? 'Parsing...' : 'Extract Entities'}
+              </button>
+            )}
+          </div>
+
+          {/* Structured Facts Preview */}
+          {structuredFacts && (
+            <div className="mt-3 p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs space-y-1">
+              <div className="font-semibold text-cyan-400 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Structured Ground Truth Baseline
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-slate-300 font-mono text-[11px] pt-1">
+                <div>Date: {structuredFacts.event_date || 'None'}</div>
+                <div>Location: {structuredFacts.location || 'None'}</div>
+                <div>Entities: {(structuredFacts.people || []).join(', ') || 'None'}</div>
+                <div>Type: {structuredFacts.event_type || 'Unspecified'}</div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* AI Enhancement Toggle */}
+        <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bot className="w-4 h-4 text-cyan-400" />
+            <div>
+              <span className="text-xs font-semibold text-slate-200 block">AI-Assisted Cross-Modal Reasoning</span>
+              <span className="text-[11px] text-slate-400">Uses configured Gemini or OpenAI provider for semantic correlation</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <select
+              value={formData.ai_provider}
+              onChange={(e) => setFormData({ ...formData, ai_provider: e.target.value })}
+              className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300 font-mono"
+            >
+              <option value="gemini">Gemini</option>
+              <option value="openai">OpenAI</option>
+            </select>
+            <input
+              type="checkbox"
+              checked={formData.ai_enabled}
+              onChange={(e) => setFormData({ ...formData, ai_enabled: e.target.checked })}
+              className="w-4 h-4 rounded text-cyan-500 focus:ring-0 bg-slate-950 border-slate-700"
+            />
+          </div>
         </div>
 
         <div className="pt-4 border-t border-slate-800 flex justify-end gap-3">

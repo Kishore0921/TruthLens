@@ -37,8 +37,19 @@ export const getFindings = (investigationId) => client.get(`/investigations/${in
 export const getCorrelations = (investigationId) => client.get(`/investigations/${investigationId}/correlations`);
 
 export const getReport = (investigationId) => client.get(`/investigations/${investigationId}/report`);
+export const getAssessment = (investigationId) => client.get(`/investigations/${investigationId}/assessment`);
 export const downloadPdfReport = (investigationId) =>
   client.get(`/investigations/${investigationId}/report/pdf`, { responseType: 'blob' });
+
+export const getDashboardStats = () => client.get('/dashboard/stats');
+export const deleteEvidence = (evidenceId) => client.delete(`/evidence/${evidenceId}`);
+
+// Settings & AI Provider Endpoints
+export const getAIProviders = () => client.get('/settings/ai-providers');
+export const updateAIProvider = (providerId, data) => client.put(`/settings/ai-providers/${providerId}`, data);
+export const testAIProvider = (providerId) => client.post(`/settings/ai-providers/${providerId}/test`);
+export const deleteAIProviderKey = (providerId) => client.delete(`/settings/ai-providers/${providerId}/key`);
+export const extractReferenceFacts = (text) => client.post('/settings/extract-reference-facts', { text });
 
 export const getEvidenceFileUrl = (evidenceId) => `${API_BASE}/evidence/${evidenceId}/file`;
 export const getArtifactUrl = (evidenceId, filename) => `${API_BASE}/evidence/${evidenceId}/artifact/${filename}`;

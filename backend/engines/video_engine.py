@@ -6,6 +6,7 @@ from pathlib import Path
 from backend.schemas import Finding, EvidenceLocation
 from backend.config import PROCESSED_DIR
 from backend.forensic.metadata import extract_video_metadata
+from backend.models_registry import ModelRegistry
 
 async def analyze_video(evidence_id: str, filepath: str, media_type: str) -> list[Finding]:
     findings: list[Finding] = []
@@ -39,7 +40,34 @@ async def analyze_video(evidence_id: str, filepath: str, media_type: str) -> lis
         limitations=["Container metadata can be rewritten without re-encoding video streams"]
     ))
 
-    # 2. Sequential OpenCV frame extraction (8 - 12 frames, max 15s capped)
+    # 2. Check for presence of embedded audio stream
+    has_audio_stream = False
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-show_streams", "-select_streams", "a", filepath],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0 and "codec_type=audio" in result.stdout:
+            has_audio_stream = True
+    except Exception:
+        # Fallback heuristic: check container extension
+        has_audio_stream = Path(filepath).suffix.lower() in [".mp4", ".mov", ".mkv", ".avi"]
+
+    findings.append(Finding(
+        finding_id=str(uuid.uuid4()),
+        evidence_id=evidence_id,
+        media_type="video",
+        engine="video_audio_track_probe",
+        indicator="audio_track_presence",
+        description=f"Audio track probe: {'Embedded audio stream detected in video container.' if has_audio_stream else 'No independent audio stream identified.'}",
+        location=EvidenceLocation(timestamp=0.0),
+        model_score=None,
+        confidence_band="high",
+        limitations=["Container stream inspection; muted or silent audio tracks may still appear present"]
+    ))
+
+    # 3. Sequential OpenCV frame extraction (8 - 12 frames, max 15s capped)
     try:
         import cv2
         cap = cv2.VideoCapture(filepath)
@@ -78,7 +106,8 @@ async def analyze_video(evidence_id: str, filepath: str, media_type: str) -> lis
 
         frame_brightnesses = []
         frame_sharpnesses = []
-        extracted_thumbnails = []
+        prev_gray = None
+        scene_changes = 0
 
         for idx, f_no in enumerate(sample_frame_indices):
             cap.set(cv2.CAP_PROP_POS_FRAMES, f_no)
@@ -95,7 +124,6 @@ async def analyze_video(evidence_id: str, filepath: str, media_type: str) -> lis
             thumb_filename = f"frame_{idx:02d}_{f_no}.jpg"
             thumb_path = processed_dir / thumb_filename
             cv2.imwrite(str(thumb_path), thumb)
-            extracted_thumbnails.append({"frame_number": f_no, "timestamp": ts, "filename": thumb_filename})
 
             # Frame statistics
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -104,30 +132,36 @@ async def analyze_video(evidence_id: str, filepath: str, media_type: str) -> lis
             lap_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
             frame_sharpnesses.append(lap_var)
 
-            # Record sample observation
+            # Scene change detection across consecutive samples
+            if prev_gray is not None and prev_gray.shape == gray.shape:
+                diff = cv2.absdiff(prev_gray, gray)
+                diff_mean = float(np.mean(diff))
+                if diff_mean > 60.0:
+                    scene_changes += 1
+            prev_gray = gray
+
             findings.append(Finding(
                 finding_id=str(uuid.uuid4()),
                 evidence_id=evidence_id,
                 media_type="video",
                 engine="video_frame_sampler",
                 indicator="sampled_frame_observation",
-                description=f"Sampled frame #{f_no} at {ts}s: luminance={b_val:.1f}/255, edge contrast variance={lap_var:.1f}",
+                description=f"Sampled frame #{f_no} at {ts:.2f}s: luminance={b_val:.1f}/255, edge contrast variance={lap_var:.1f}",
                 location=EvidenceLocation(timestamp=ts, frame_number=f_no),
                 model_score=None,
                 confidence_band="high",
-                limitations=["Sparse sampling; inter-frame anomalies may exist between sample points"]
+                limitations=["Sparse sampling; anomalies between sampled points are unobserved"]
             ))
 
         cap.release()
 
-        # Inter-frame consistency assessment
+        # Inter-frame consistency & scene-change assessment
         if len(frame_brightnesses) >= 2:
             b_std = float(np.std(frame_brightnesses))
             b_range = float(max(frame_brightnesses) - min(frame_brightnesses))
-            sharp_std = float(np.std(frame_sharpnesses))
-
-            # Indicator of lighting stability or sudden scene cuts
             is_unstable = b_std > 40.0
+
+            scene_desc = f"{scene_changes} potential scene cut(s)/abrupt transition(s) detected across sample points." if scene_changes > 0 else "Continuous visual sequence observed across samples."
             findings.append(Finding(
                 finding_id=str(uuid.uuid4()),
                 evidence_id=evidence_id,
@@ -136,15 +170,14 @@ async def analyze_video(evidence_id: str, filepath: str, media_type: str) -> lis
                 indicator="interframe_lighting_stability",
                 description=(
                     f"Analyzed {len(frame_brightnesses)} sampled frames (duration covered: {min(calc_duration, 15.0):.1f}s). "
-                    f"Luminance standard deviation: {b_std:.2f}, dynamic range: {b_range:.1f}. "
-                    f"{'Significant luminance fluctuation detected across samples.' if is_unstable else 'Stable inter-frame illumination.'}"
+                    f"Luminance standard deviation: {b_std:.2f}, dynamic range: {b_range:.1f}. {scene_desc}"
                 ),
                 location=EvidenceLocation(timestamp=0.0),
                 model_score=round(min(b_std / 80.0, 1.0), 3),
-                confidence_band="medium" if is_unstable else "low",
+                confidence_band="medium" if (is_unstable or scene_changes > 0) else "low",
                 limitations=[
-                    "Luminance variations occur naturally with camera motion, panning, and lighting shifts",
-                    "Does not differentiate between benign editing/cuts and deepfake artifacting"
+                    "Luminance shifts occur naturally with camera movement, zooming, or normal editing cuts",
+                    "Does not prove artificial face-swapping or deepfake generation"
                 ]
             ))
 
@@ -155,7 +188,7 @@ async def analyze_video(evidence_id: str, filepath: str, media_type: str) -> lis
                 media_type="video",
                 engine="hardware_safeguard",
                 indicator="sampling_window_capped",
-                description=f"Total video length ({calc_duration:.1f}s) exceeded CPU execution cap (15.0s). Analysis restricted to initial 15s window.",
+                description=f"Total video duration ({calc_duration:.1f}s) exceeded CPU execution safeguard (15.0s). Analysis restricted to initial 15s window.",
                 location=EvidenceLocation(timestamp=15.0),
                 model_score=None,
                 confidence_band="high",
@@ -175,5 +208,26 @@ async def analyze_video(evidence_id: str, filepath: str, media_type: str) -> lis
             confidence_band="low",
             limitations=["Frame extraction pipeline encountered an unexpected runtime failure"]
         ))
+
+    # Pretrained / Signal Video Models
+    try:
+        registry = ModelRegistry.get_instance()
+        adapters = registry.get_models_for_task("deepfake_temporal_consistency")
+        for adapter in adapters:
+            pred = await adapter.predict(filepath)
+            findings.append(Finding(
+                finding_id=str(uuid.uuid4()),
+                evidence_id=evidence_id,
+                media_type="video",
+                engine=adapter.model_id,
+                indicator=pred.indicator,
+                description=pred.description,
+                location=EvidenceLocation(region=pred.details),
+                model_score=pred.score,
+                confidence_band=pred.confidence_band,
+                limitations=pred.limitations
+            ))
+    except Exception as e:
+        pass
 
     return findings

@@ -5,13 +5,14 @@ from pathlib import Path
 from backend.schemas import Finding, EvidenceLocation
 from backend.config import PROCESSED_DIR
 from backend.forensic.metadata import extract_audio_metadata
+from backend.models_registry import ModelRegistry
 
 async def analyze_audio(evidence_id: str, filepath: str, media_type: str) -> list[Finding]:
     findings: list[Finding] = []
     processed_dir = PROCESSED_DIR / evidence_id
     processed_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Metadata
+    # 1. Container & Stream Metadata
     meta = extract_audio_metadata(filepath)
     duration = float(meta.get("duration", 0.0) or 0.0)
     sample_rate = meta.get("sample_rate", "unknown")
@@ -36,7 +37,7 @@ async def analyze_audio(evidence_id: str, filepath: str, media_type: str) -> lis
         limitations=["Audio container and header properties confirmed from stream inspection"]
     ))
 
-    # 2. Librosa / Soundfile Analysis & Visualizations
+    # 2. Signal Processing, Visualizations & Quantitative Metrics
     try:
         import matplotlib
         matplotlib.use("Agg")  # Headless non-interactive rendering
@@ -53,7 +54,6 @@ async def analyze_audio(evidence_id: str, filepath: str, media_type: str) -> lis
             fig, ax = plt.subplots(figsize=(8, 2.5), facecolor="#0f172a")
             ax.set_facecolor("#1e293b")
             times = np.linspace(0, actual_len_s, num=len(y))
-            # Downsample if very long
             step = max(1, len(y) // 3000)
             ax.plot(times[::step], y[::step], color="#06b6d4", linewidth=0.6, alpha=0.9)
             ax.set_title("Audio Amplitude Waveform", color="#e2e8f0", fontsize=10)
@@ -92,7 +92,7 @@ async def analyze_audio(evidence_id: str, filepath: str, media_type: str) -> lis
         except Exception as se:
             print(f"Spectrogram plot error: {se}")
 
-        # --- C. Quantitative Spectral & Acoustic Features ---
+        # --- C. Quantitative Acoustic & Integrity Metrics ---
         rms = librosa.feature.rms(y=y)[0]
         mean_rms = float(np.mean(rms))
         std_rms = float(np.std(rms))
@@ -103,9 +103,13 @@ async def analyze_audio(evidence_id: str, filepath: str, media_type: str) -> lis
         spectral_centroids = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
         mean_centroid = float(np.mean(spectral_centroids))
 
-        # Spectral flatness (measure of noisiness vs harmonic tone)
-        flatness = librosa.feature.spectral_flatness(y=y)[0]
-        mean_flatness = float(np.mean(flatness))
+        # Spectral rolloff (frequency below which 85% of spectral energy lies)
+        rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr, roll_percent=0.85)[0]
+        mean_rolloff = float(np.mean(rolloff))
+
+        # Silence / Inactivity Ratio (RMS below 0.01 threshold)
+        silent_frames = np.sum(rms < 0.01)
+        silence_ratio = float(silent_frames / len(rms)) if len(rms) > 0 else 0.0
 
         findings.append(Finding(
             finding_id=str(uuid.uuid4()),
@@ -114,9 +118,9 @@ async def analyze_audio(evidence_id: str, filepath: str, media_type: str) -> lis
             engine="audio_spectral_acoustic",
             indicator="acoustic_profile",
             description=(
-                f"Acoustic profile: Mean RMS energy={mean_rms:.4f} (σ={std_rms:.4f}), "
+                f"Acoustic profile: Mean RMS={mean_rms:.4f} (σ={std_rms:.4f}), "
                 f"Zero-crossing rate={mean_zcr:.4f}, Spectral centroid={mean_centroid:.1f} Hz, "
-                f"Spectral flatness={mean_flatness:.5f}."
+                f"Spectral rolloff (85%)={mean_rolloff:.1f} Hz, Silence ratio={silence_ratio*100:.1f}%."
             ),
             location=EvidenceLocation(timestamp=0.0),
             model_score=None,
@@ -128,8 +132,7 @@ async def analyze_audio(evidence_id: str, filepath: str, media_type: str) -> lis
             ]
         ))
 
-        # Check for high frequency cutoff anomalies (often introduced by synthetic models or lossy encoding)
-        # We present this as an explainable observation, NEVER a definitive verdict
+        # Check for sharp artificial frequency cutoff (common in synthetic audio or heavy compression)
         cutoff_detected = mean_centroid < 1800 and sr >= 32000
         findings.append(Finding(
             finding_id=str(uuid.uuid4()),
@@ -138,7 +141,7 @@ async def analyze_audio(evidence_id: str, filepath: str, media_type: str) -> lis
             engine="audio_spectral_acoustic",
             indicator="spectral_frequency_band_distribution",
             description=(
-                f"Frequency band concentration: Center of mass at {mean_centroid:.1f} Hz. "
+                f"Frequency band concentration: Center of mass at {mean_centroid:.1f} Hz, Rolloff at {mean_rolloff:.1f} Hz. "
                 f"{'Low spectral centroid observed relative to native sampling rate.' if cutoff_detected else 'Spectral distribution conforms to typical voice/acoustic range.'}"
             ),
             location=EvidenceLocation(timestamp=0.0),
@@ -157,7 +160,7 @@ async def analyze_audio(evidence_id: str, filepath: str, media_type: str) -> lis
             media_type="audio",
             engine="audio_acoustic_fallback",
             indicator="dependency_unavailable",
-            description=f"Advanced acoustic library unavailable ({str(ie)}). Falling back to basic container analysis.",
+            description=f"Advanced acoustic library unavailable ({str(ie)}). Basic metadata recorded.",
             location=EvidenceLocation(),
             model_score=None,
             confidence_band="low",
@@ -176,5 +179,26 @@ async def analyze_audio(evidence_id: str, filepath: str, media_type: str) -> lis
             confidence_band="low",
             limitations=["Audio analysis pipeline could not parse all frames"]
         ))
+
+    # 3. Reference-Independent Synthetic Audio Detector
+    try:
+        registry = ModelRegistry.get_instance()
+        adapters = registry.get_models_for_task("synthetic_audio_detection")
+        for adapter in adapters:
+            pred = await adapter.predict(filepath)
+            findings.append(Finding(
+                finding_id=str(uuid.uuid4()),
+                evidence_id=evidence_id,
+                media_type="audio",
+                engine=adapter.model_id,
+                indicator=pred.indicator,
+                description=pred.description,
+                location=EvidenceLocation(region=pred.details),
+                model_score=pred.score,
+                confidence_band=pred.confidence_band,
+                limitations=pred.limitations
+            ))
+    except Exception as e:
+        pass
 
     return findings

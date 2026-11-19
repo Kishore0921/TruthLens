@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { FileImage, Video, Music, FileText, Copy, Check, ExternalLink, ShieldCheck } from 'lucide-react';
+import { FileImage, Video, Music, FileText, Copy, Check, ExternalLink, ShieldCheck, Trash2 } from 'lucide-react';
 import { getEvidenceFileUrl } from '../services/api';
 
-export default function EvidenceCard({ evidence, onRemove }) {
+export default function EvidenceCard({ evidence, onRemove, canDelete = false }) {
   const [copied, setCopied] = useState(false);
 
   const mediaIcons = {
@@ -13,6 +13,7 @@ export default function EvidenceCard({ evidence, onRemove }) {
   };
 
   const Icon = mediaIcons[evidence.media_type] || FileText;
+  const fileUrl = getEvidenceFileUrl(evidence.id);
 
   const copyHash = (e) => {
     e.stopPropagation();
@@ -32,23 +33,25 @@ export default function EvidenceCard({ evidence, onRemove }) {
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between hover:border-slate-700 transition-all shadow-md">
       <div>
         {/* Preview / Media Header */}
-        <div className="relative w-full h-36 bg-slate-950 rounded-lg overflow-hidden border border-slate-800/80 mb-3 flex items-center justify-center group">
+        <div className="relative w-full h-40 bg-slate-950 rounded-lg overflow-hidden border border-slate-800/80 mb-3 flex items-center justify-center group">
           {evidence.media_type === 'image' ? (
             <img
-              src={getEvidenceFileUrl(evidence.id)}
+              src={fileUrl}
               alt={evidence.original_filename}
               className="w-full h-full object-contain"
               loading="lazy"
             />
           ) : evidence.media_type === 'video' ? (
-            <div className="text-center p-3">
-              <Video className="w-10 h-10 text-cyan-400 mx-auto mb-1 opacity-80" />
-              <span className="text-[11px] font-mono text-slate-400">Video Evidence</span>
-            </div>
+            <video
+              src={fileUrl}
+              controls
+              className="w-full h-full object-contain bg-black"
+              preload="metadata"
+            />
           ) : evidence.media_type === 'audio' ? (
-            <div className="text-center p-3">
-              <Music className="w-10 h-10 text-amber-400 mx-auto mb-1 opacity-80" />
-              <span className="text-[11px] font-mono text-slate-400">Audio Recording</span>
+            <div className="w-full p-3 flex flex-col items-center justify-center gap-2">
+              <Music className="w-8 h-8 text-amber-400 opacity-80" />
+              <audio controls src={fileUrl} className="w-full h-8" preload="metadata" />
             </div>
           ) : (
             <div className="text-center p-3">
@@ -59,7 +62,7 @@ export default function EvidenceCard({ evidence, onRemove }) {
 
           {/* Quick open link */}
           <a
-            href={getEvidenceFileUrl(evidence.id)}
+            href={fileUrl}
             target="_blank"
             rel="noopener noreferrer"
             title="Inspect raw original"
@@ -71,7 +74,7 @@ export default function EvidenceCard({ evidence, onRemove }) {
 
         {/* Title & Metadata */}
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h4 className="text-sm font-semibold text-slate-200 truncate" title={evidence.original_filename}>
               {evidence.original_filename}
             </h4>
@@ -84,6 +87,16 @@ export default function EvidenceCard({ evidence, onRemove }) {
               </span>
             </div>
           </div>
+
+          {canDelete && onRemove && (
+            <button
+              onClick={() => onRemove(evidence.id)}
+              title="Remove evidence"
+              className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-red-950/40 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 

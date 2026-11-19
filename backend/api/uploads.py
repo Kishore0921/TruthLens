@@ -1,4 +1,5 @@
 import json
+import mimetypes
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
@@ -15,7 +16,6 @@ from backend.forensic.metadata import (
 )
 
 router = APIRouter(prefix="/api/v1", tags=["uploads"])
-
 
 @router.post("/investigations/{investigation_id}/evidence", response_model=EvidenceResponse, status_code=201)
 async def upload_evidence(
@@ -41,7 +41,7 @@ async def upload_evidence(
 
     sha256 = compute_sha256(save_path)
 
-    # Extract metadata
+    # Extract initial metadata
     metadata = {}
     try:
         if media_type == "image":
@@ -83,7 +83,6 @@ async def upload_evidence(
         created_at=evidence.created_at,
     )
 
-
 @router.get("/investigations/{investigation_id}/evidence", response_model=list[EvidenceResponse])
 def list_evidence(investigation_id: str, db: Session = Depends(get_db)):
     inv = db.query(Investigation).filter(Investigation.id == investigation_id).first()
@@ -105,6 +104,44 @@ def list_evidence(investigation_id: str, db: Session = Depends(get_db)):
         for e in items
     ]
 
+@router.delete("/investigations/{investigation_id}/evidence/{evidence_id}")
+def delete_evidence_item(
+    investigation_id: str,
+    evidence_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete evidence before analysis.
+    Safeguard: Blocked if investigation has been analyzed to preserve forensic chain of custody.
+    """
+    inv = db.query(Investigation).filter(Investigation.id == investigation_id).first()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+
+    if inv.status in ["analyzing", "analyzed", "completed"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Evidence cannot be removed after analysis has commenced. Immutable forensic chain of custody."
+        )
+
+    ev = db.query(Evidence).filter(
+        Evidence.id == evidence_id,
+        Evidence.investigation_id == investigation_id
+    ).first()
+    if not ev:
+        raise HTTPException(status_code=404, detail="Evidence item not found")
+
+    # Remove original file if exists
+    try:
+        p = Path(ev.original_path)
+        if p.exists():
+            p.unlink()
+    except Exception:
+        pass
+
+    db.delete(ev)
+    db.commit()
+    return {"status": "deleted", "id": evidence_id}
 
 @router.get("/evidence/{evidence_id}/file")
 def serve_evidence_file(evidence_id: str, db: Session = Depends(get_db)):
@@ -114,11 +151,13 @@ def serve_evidence_file(evidence_id: str, db: Session = Depends(get_db)):
     file_path = Path(evidence.original_path)
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
+        
+    mime_type, _ = mimetypes.guess_type(str(file_path))
     return FileResponse(
         path=str(file_path),
         filename=evidence.original_filename,
+        media_type=mime_type or "application/octet-stream"
     )
-
 
 @router.get("/evidence/{evidence_id}/artifact/{filename}")
 def serve_artifact(evidence_id: str, filename: str, db: Session = Depends(get_db)):
@@ -134,4 +173,10 @@ def serve_artifact(evidence_id: str, filename: str, db: Session = Depends(get_db
     artifact_path = artifact_dir / filename
     if not artifact_path.exists():
         raise HTTPException(status_code=404, detail="Artifact not found")
-    return FileResponse(path=str(artifact_path), filename=filename)
+        
+    mime_type, _ = mimetypes.guess_type(str(artifact_path))
+    return FileResponse(
+        path=str(artifact_path),
+        filename=filename,
+        media_type=mime_type or "application/octet-stream"
+    )

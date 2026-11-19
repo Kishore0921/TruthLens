@@ -1,11 +1,12 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Shield, PlusCircle, LayoutDashboard, FileSearch, Sparkles } from 'lucide-react';
+import { Shield, PlusCircle, LayoutDashboard, FileSearch, Sparkles, Settings as SettingsIcon } from 'lucide-react';
 
 export default function Sidebar() {
   const navItems = [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/investigations/new', label: 'New Investigation', icon: PlusCircle },
+    { to: '/settings', label: 'AI & Settings', icon: SettingsIcon },
   ];
 
   return (

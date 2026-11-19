@@ -11,18 +11,35 @@ export default function FindingCard({ finding, evidenceMap = {} }) {
   const isEla = finding.engine === 'ela_engine' || finding.indicator?.includes('ela');
   const isAudioAcoustic = finding.engine?.includes('audio') && finding.indicator?.includes('profile');
 
+  const isModel = [
+    'frequency_spectral_analyzer',
+    'local_noise_analyzer',
+    'temporal_consistency_detector',
+    'synthetic_speech_acoustic_analyzer',
+    'ela_engine'
+  ].includes(finding.engine);
+
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 hover:border-slate-700/80 transition-all shadow-md">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-xs uppercase px-2 py-0.5 rounded bg-blue-950/60 text-blue-400 border border-blue-800/40 font-medium">
+            <span className={`font-mono text-xs uppercase px-2 py-0.5 rounded border font-medium ${
+              isModel
+                ? 'bg-purple-950/60 text-purple-300 border-purple-800/40'
+                : 'bg-blue-950/60 text-blue-400 border-blue-800/40'
+            }`}>
               {finding.engine}
             </span>
             <span className="text-xs text-slate-400 font-mono">
               {finding.indicator}
             </span>
+            {isModel && (
+              <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-slate-800 text-cyan-400 border border-slate-700">
+                Model Indicator
+              </span>
+            )}
           </div>
           {ev && (
             <p className="text-xs text-slate-400 font-medium">

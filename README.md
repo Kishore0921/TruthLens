@@ -37,6 +37,8 @@ TruthLens is purpose-built for commodity resource-constrained hardware (e.g. **I
 - **Frontend**: React 19, Vite, Tailwind CSS, React Router, Axios, Recharts, `@xyflow/react` (interactive forensic relationship graph), Lucide Icons.
 - **Backend**: Python 3.12, FastAPI, Pydantic v2, SQLAlchemy, SQLite, Uvicorn.
 - **Forensic & Signal Processing**: Pillow, OpenCV (headless), NumPy, SoundFile, Matplotlib (headless Agg backend), Librosa, Hashlib, ReportLab.
+- **Model Registry & Signal Adapters**: Reference-independent 2D-FFT frequency analysis, sensor noise variance, video temporal jitter consistency, synthetic speech acoustic analysis.
+- **Security & AI Keys**: Fernet AES-128 symmetric encryption at rest for optional Gemini & OpenAI credentials, zero plaintext frontend exposure.
 - **Architecture**: Single-process lightweight asynchronous web service with zero external cloud dependencies.
 
 ---

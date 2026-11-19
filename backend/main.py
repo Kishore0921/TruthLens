@@ -6,6 +6,7 @@ from backend.schemas import HealthResponse
 from backend.api.investigations import router as inv_router
 from backend.api.uploads import router as upload_router
 from backend.api.analysis import router as analysis_router
+from backend.api.settings import router as settings_router
 
 app = FastAPI(title="TruthLens", description="Multimodal Digital Forensics API", version="1.0.0")
 
@@ -20,6 +21,7 @@ app.add_middleware(
 app.include_router(inv_router)
 app.include_router(upload_router)
 app.include_router(analysis_router)
+app.include_router(settings_router)
 
 @app.on_event("startup")
 def startup():

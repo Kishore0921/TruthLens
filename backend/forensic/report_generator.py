@@ -145,6 +145,27 @@ def generate_pdf_report(report_data: dict) -> Path:
     if inv.get("description"):
         story.append(Paragraph(f"<b>Description:</b> {inv['description']}", styles['TLBody']))
 
+    # ── Executive Forensic Assessment ──
+    assessment = report_data.get("assessment", {})
+    if assessment:
+        badge = assessment.get("badge_label", "Under Review")
+        headline = assessment.get("headline", "")
+        narrative = assessment.get("summary_narrative", "")
+
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph(f"<b>Forensic Assessment:</b> <font color='#1a237e'><b>{badge}</b></font>", styles['TLSubHeading']))
+        if headline:
+            story.append(Paragraph(f"<b>{headline}</b>", styles['TLBody']))
+        if narrative:
+            story.append(Paragraph(narrative, styles['TLBody']))
+
+        key_obs = assessment.get("key_observations", [])
+        if key_obs:
+            story.append(Paragraph("<b>Key Empirical Observations:</b>", styles['TLBody']))
+            for obs in key_obs[:5]:
+                story.append(Paragraph(f"• {obs}", styles['TLBody']))
+
+    story.append(Spacer(1, 4 * mm))
     story.append(Paragraph(
         "<i>This report presents observations, heuristic indicators, and model-based scores. "
         "It does not make definitive claims of authenticity or fabrication. "
@@ -248,6 +269,12 @@ def generate_pdf_report(report_data: dict) -> Path:
             if c.get("rule_id"):
                 story.append(Paragraph(
                     f'<font color="#757575"><i>Rule: {c["rule_id"]}</i></font>',
+                    styles['TLBody']
+                ))
+            c_limitations = c.get("limitations", [])
+            if c_limitations:
+                story.append(Paragraph(
+                    f'<font color="#757575"><i>Correlation Limitations: {"; ".join(c_limitations)}</i></font>',
                     styles['TLBody']
                 ))
             story.append(Spacer(1, 2 * mm))

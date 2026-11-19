@@ -7,6 +7,8 @@ import {
   startAnalysis,
   getFindings,
   getCorrelations,
+  getAssessment,
+  deleteEvidence,
   downloadPdfReport,
 } from '../services/api';
 import StatusBadge from '../components/StatusBadge';
@@ -34,6 +36,7 @@ export default function InvestigationDetail() {
   const [evidence, setEvidence] = useState([]);
   const [findings, setFindings] = useState([]);
   const [correlations, setCorrelations] = useState([]);
+  const [assessment, setAssessment] = useState(null);
   const [activeTab, setActiveTab] = useState('evidence'); // 'evidence' | 'analysis' | 'correlations' | 'report'
 
   const [loading, setLoading] = useState(true);
@@ -57,19 +60,32 @@ export default function InvestigationDetail() {
       setInvestigation(invRes.data);
       setEvidence(evRes.data || []);
 
-      // If analyzed, also fetch findings & correlations
+      // If analyzed, also fetch findings & correlations & assessment
       if (invRes.data.status === 'analyzed' || invRes.data.status === 'completed') {
-        const [fRes, cRes] = await Promise.all([
+        const [fRes, cRes, aRes] = await Promise.all([
           getFindings(id),
           getCorrelations(id),
+          getAssessment(id).catch(() => null),
         ]);
         setFindings(fRes.data || []);
         setCorrelations(cRes.data || []);
+        if (aRes && aRes.data) setAssessment(aRes.data);
       }
     } catch (err) {
       console.error('Failed to load investigation:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteEvidence = async (evidenceId) => {
+    if (!confirm('Remove this evidence item?')) return;
+    try {
+      await deleteEvidence(evidenceId);
+      const evRes = await getEvidence(id);
+      setEvidence(evRes.data || []);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to delete evidence');
     }
   };
 
@@ -100,14 +116,16 @@ export default function InvestigationDetail() {
     try {
       await startAnalysis(id);
       // Refresh data
-      const [invRes, fRes, cRes] = await Promise.all([
+      const [invRes, fRes, cRes, aRes] = await Promise.all([
         getInvestigation(id),
         getFindings(id),
         getCorrelations(id),
+        getAssessment(id).catch(() => null),
       ]);
       setInvestigation(invRes.data);
       setFindings(fRes.data || []);
       setCorrelations(cRes.data || []);
+      if (aRes && aRes.data) setAssessment(aRes.data);
       setActiveTab('analysis');
     } catch (err) {
       setAnalysisError(err.response?.data?.detail || 'Analysis execution failed');
@@ -278,7 +296,12 @@ export default function InvestigationDetail() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {evidence.map((ev) => (
-                  <EvidenceCard key={ev.id} evidence={ev} />
+                  <EvidenceCard
+                    key={ev.id}
+                    evidence={ev}
+                    onRemove={handleDeleteEvidence}
+                    canDelete={investigation.status === 'created' || investigation.status === 'draft'}
+                  />
                 ))}
               </div>
             )}
@@ -289,6 +312,40 @@ export default function InvestigationDetail() {
       {/* TAB 2: Forensic Analysis Findings */}
       {activeTab === 'analysis' && (
         <div className="space-y-6">
+          {/* Executive Forensic Assessment Summary Banner */}
+          {assessment && (
+            <div className={`p-5 rounded-xl border ${
+              assessment.primary_status === 'STRONG_INDICATORS'
+                ? 'bg-rose-950/40 border-rose-800 text-rose-200'
+                : assessment.primary_status === 'CONFLICTING_FINDINGS'
+                ? 'bg-amber-950/40 border-amber-800 text-amber-200'
+                : assessment.primary_status === 'AI_GENERATED_INDICATORS'
+                ? 'bg-purple-950/40 border-purple-800 text-purple-200'
+                : assessment.primary_status === 'POTENTIAL_INDICATORS'
+                ? 'bg-blue-950/40 border-blue-800 text-blue-200'
+                : 'bg-emerald-950/40 border-emerald-800 text-emerald-200'
+            }`}>
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono font-semibold uppercase px-2 py-0.5 rounded bg-black/40 border border-white/20">
+                    {assessment.badge_label}
+                  </span>
+                  <span className="font-semibold text-sm">{assessment.headline}</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs font-mono">
+                  <span>{assessment.observations_count} Observations</span>
+                  <span>•</span>
+                  <span>{assessment.heuristics_flagged_count + assessment.models_flagged_count} Indicators</span>
+                  <span>•</span>
+                  <span>{assessment.contradictions_count} Contradictions</span>
+                </div>
+              </div>
+              <p className="text-xs mt-3 leading-relaxed opacity-90">
+                {assessment.summary_narrative}
+              </p>
+            </div>
+          )}
+
           {/* Media type filter buttons */}
           <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-900 border border-slate-800 rounded-xl">
             <div className="flex items-center gap-2">
