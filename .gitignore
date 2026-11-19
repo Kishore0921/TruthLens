@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.db
+truthlens.db
+
+# Storage / Artifacts
+storage/originals/*
+storage/processed/*
+storage/reports/*
+!storage/originals/.gitkeep
+!storage/processed/.gitkeep
+!storage/reports/.gitkeep
+
+# Node / Frontend
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
