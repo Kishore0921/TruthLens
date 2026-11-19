@@ -126,6 +126,8 @@ class AIProviderConfigResponse(BaseModel):
     last_tested_at: datetime | None = None
     last_error: str | None = None
     available_models: list[str] = Field(default_factory=list)
+    config_source: str = "backend/.env"
+    execution_mode: str = "HYBRID"
 
 class AIProviderUpdateRequest(BaseModel):
     api_key: str | None = None

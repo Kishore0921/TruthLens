@@ -3,6 +3,7 @@ from backend.models_registry.base_adapter import BaseModelAdapter
 from backend.models_registry.image_ai_detector import FrequencyArtifactDetector, LocalNoiseVarianceDetector
 from backend.models_registry.deepfake_detector import VideoTemporalConsistencyDetector
 from backend.models_registry.audio_spoof_detector import SyntheticAudioDetector
+from backend.models_registry.hf_image_detector import HuggingFaceImageAIDetector
 
 class ModelRegistry:
     _instance: Optional["ModelRegistry"] = None
@@ -22,6 +23,7 @@ class ModelRegistry:
         self.register(LocalNoiseVarianceDetector())
         self.register(VideoTemporalConsistencyDetector())
         self.register(SyntheticAudioDetector())
+        self.register(HuggingFaceImageAIDetector())
 
     def register(self, adapter: BaseModelAdapter):
         self._adapters[adapter.model_id] = adapter

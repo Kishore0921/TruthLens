@@ -45,10 +45,12 @@ export const getDashboardStats = () => client.get('/dashboard/stats');
 export const deleteEvidence = (evidenceId) => client.delete(`/evidence/${evidenceId}`);
 
 // Settings & AI Provider Endpoints
-export const getAIProviders = () => client.get('/settings/ai-providers');
-export const updateAIProvider = (providerId, data) => client.put(`/settings/ai-providers/${providerId}`, data);
-export const testAIProvider = (providerId) => client.post(`/settings/ai-providers/${providerId}/test`);
-export const deleteAIProviderKey = (providerId) => client.delete(`/settings/ai-providers/${providerId}/key`);
+export const getAIProviders = () => client.get('/providers');
+export const updateAIProvider = (providerId, data) => client.post(`/providers/${providerId}/configure`, data);
+export const testAIProvider = (providerId) => client.post(`/providers/${providerId}/test`);
+export const deleteAIProviderKey = (providerId) => client.delete(`/providers/${providerId}`);
+export const getSystemHealth = () => client.get('/providers/system/health');
+export const getForensicDatasets = () => client.get('/providers/datasets/catalog');
 export const extractReferenceFacts = (text) => client.post('/settings/extract-reference-facts', { text });
 
 export const getEvidenceFileUrl = (evidenceId) => `${API_BASE}/evidence/${evidenceId}/file`;

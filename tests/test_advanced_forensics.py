@@ -201,5 +201,32 @@ class TestAdvancedForensics(unittest.TestCase):
         self.assertGreater(len(content), 10)
         self.assertIn("Bangalore", content)
 
+    def test_10_huggingface_model_adapter_and_system_health(self):
+        """Verify Hugging Face model adapter registered, system health, and datasets catalog API."""
+        registry = ModelRegistry.get_instance()
+        hf_model = registry.get_model("hf_ai_image_detector")
+        self.assertIsNotNone(hf_model)
+        self.assertEqual(hf_model.modality, "image")
+        self.assertEqual(hf_model.execution_method, "local_cpu")
+        self.assertGreater(len(hf_model.limitations), 0)
+
+        # GET /api/v1/providers/system/health
+        res = self.client.get("/api/v1/providers/system/health")
+        self.assertEqual(res.status_code, 200)
+        health = res.json()
+        self.assertIn("execution_mode", health)
+        self.assertIn("providers", health)
+        self.assertIn("models", health)
+        self.assertIn("hardware", health)
+        self.assertEqual(health["hardware"]["device"], "cpu")
+
+        # GET /api/v1/providers/datasets/catalog
+        res_ds = self.client.get("/api/v1/providers/datasets/catalog")
+        self.assertEqual(res_ds.status_code, 200)
+        catalog = res_ds.json()
+        self.assertGreaterEqual(len(catalog), 3)
+        repo_ids = [d["repo_id"] for d in catalog]
+        self.assertIn("Organika/sdxl-detector-dataset", repo_ids)
+
 if __name__ == '__main__':
     unittest.main()

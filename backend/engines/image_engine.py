@@ -251,7 +251,7 @@ async def analyze_image(evidence_id: str, filepath: str, media_type: str) -> lis
         
     # 5. Pretrained / Reference-Independent Authenticity Models
     registry = ModelRegistry.get_instance()
-    for task_name in ["ai_image_frequency_analysis", "sensor_noise_consistency"]:
+    for task_name in ["ai_image_frequency_analysis", "sensor_noise_consistency", "ai_image_detection"]:
         adapters = registry.get_models_for_task(task_name)
         for adapter in adapters:
             try:
