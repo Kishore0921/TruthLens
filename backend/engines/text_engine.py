@@ -115,6 +115,26 @@ def extract_typed_entities(text: str) -> dict:
         "numerics": numerics[:8]
     }
 
+def extract_text_from_file(filepath: str) -> str:
+    path = Path(filepath)
+    ext = path.suffix.lower()
+    if ext == ".pdf":
+        import pypdf
+        reader = pypdf.PdfReader(filepath)
+        text_parts = []
+        for page in reader.pages:
+            t = page.extract_text()
+            if t:
+                text_parts.append(t)
+        return "\n".join(text_parts)
+    elif ext in [".docx", ".doc"]:
+        import docx
+        doc = docx.Document(filepath)
+        return "\n".join([p.text for p in doc.paragraphs if p.text])
+    else:
+        with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+            return f.read()
+
 async def analyze_text(
     evidence_id: str,
     filepath: str,
@@ -124,10 +144,9 @@ async def analyze_text(
 ) -> list[Finding]:
     findings: list[Finding] = []
 
-    # 1. Read & Normalize
+    # 1. Read & Normalize (supports .txt, .pdf, .docx)
     try:
-        with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
-            content = f.read()
+        content = extract_text_from_file(filepath)
     except Exception as e:
         findings.append(Finding(
             finding_id=str(uuid.uuid4()),

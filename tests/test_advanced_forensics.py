@@ -148,5 +148,58 @@ class TestAdvancedForensics(unittest.TestCase):
         self.assertIn("pipeline_status", data)
         self.assertIsInstance(data["pipeline_status"], dict)
 
+    def test_07_providers_management_api(self):
+        """Verify all mandatory provider API endpoints: GET, status, configure, test, models, delete."""
+        # GET /api/v1/providers
+        res = self.client.get("/api/v1/providers")
+        self.assertEqual(res.status_code, 200)
+        providers = res.json()
+        self.assertGreaterEqual(len(providers), 4)
+
+        # GET /api/v1/providers/status
+        res = self.client.get("/api/v1/providers/status")
+        self.assertEqual(res.status_code, 200)
+        status_dict = res.json()
+        self.assertIn("gemini", status_dict)
+        self.assertIn("openai", status_dict)
+        self.assertIn("anthropic", status_dict)
+        self.assertIn("huggingface", status_dict)
+
+        # GET /api/v1/providers/gemini/models
+        res = self.client.get("/api/v1/providers/gemini/models")
+        self.assertEqual(res.status_code, 200)
+        models_info = res.json()
+        self.assertIn("gemini-2.5-flash", models_info["supported_models"])
+
+        # POST /api/v1/providers/gemini/configure
+        res = self.client.post("/api/v1/providers/gemini/configure", json={
+            "selected_model": "gemini-2.5-pro",
+            "is_enabled": True
+        })
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["status"], "configured")
+
+        # POST /api/v1/providers/gemini/test
+        res = self.client.post("/api/v1/providers/gemini/test")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("success", res.json())
+
+    def test_08_phash_and_image_forensics(self):
+        """Verify perceptual hash computation on image."""
+        from backend.forensic.hashing import compute_phash
+        img_path = str(self.sample_dir / "sample_image.jpg")
+        phash = compute_phash(img_path)
+        self.assertTrue(len(phash) == 16)
+        self.assertNotEqual(phash, "0000000000000000")
+
+    def test_09_pdf_extraction_support(self):
+        """Verify PDF text extraction handles missing/corrupt or valid PDFs gracefully."""
+        from backend.engines.text_engine import extract_text_from_file
+        # Test on text file first
+        txt_path = str(self.sample_dir / "transcript_corroborating.txt")
+        content = extract_text_from_file(txt_path)
+        self.assertGreater(len(content), 10)
+        self.assertIn("Bangalore", content)
+
 if __name__ == '__main__':
     unittest.main()

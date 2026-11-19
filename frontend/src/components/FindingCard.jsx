@@ -9,6 +9,7 @@ export default function FindingCard({ finding, evidenceMap = {} }) {
 
   const ev = evidenceMap[finding.evidence_id];
   const isEla = finding.engine === 'ela_engine' || finding.indicator?.includes('ela');
+  const isMask = finding.engine === 'manipulation_localization_engine' || finding.location?.region?.has_mask;
   const isAudioAcoustic = finding.engine?.includes('audio') && finding.indicator?.includes('profile');
 
   const isModel = [
@@ -16,6 +17,7 @@ export default function FindingCard({ finding, evidenceMap = {} }) {
     'local_noise_analyzer',
     'temporal_consistency_detector',
     'synthetic_speech_acoustic_analyzer',
+    'manipulation_localization_engine',
     'ela_engine'
   ].includes(finding.engine);
 
@@ -109,6 +111,43 @@ export default function FindingCard({ finding, evidenceMap = {} }) {
                 <img
                   src={getArtifactUrl(finding.evidence_id, 'ela_visualization.png')}
                   alt="ELA Map"
+                  className="w-full h-full object-contain"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                  }}
+                  loading="lazy"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Embedded Manipulation Mask Visualizer */}
+      {isMask && ev && (
+        <div className="mt-4 p-3 bg-slate-950 rounded-lg border border-slate-800">
+          <div className="text-xs font-semibold text-slate-300 mb-2 flex items-center justify-between">
+            <span>Pixel-Level Manipulation Localization Mask</span>
+            <span className="text-[11px] text-slate-500 font-normal">Spatial residual cluster isolation</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <span className="text-[11px] text-slate-400 block mb-1 font-mono">Source Asset</span>
+              <div className="h-32 bg-slate-900 rounded border border-slate-800 overflow-hidden flex items-center justify-center">
+                <img
+                  src={getEvidenceFileUrl(finding.evidence_id)}
+                  alt="Original"
+                  className="w-full h-full object-contain"
+                  loading="lazy"
+                />
+              </div>
+            </div>
+            <div>
+              <span className="text-[11px] text-slate-400 block mb-1 font-mono">Anomalous Region Mask</span>
+              <div className="h-32 bg-slate-900 rounded border border-slate-800 overflow-hidden flex items-center justify-center">
+                <img
+                  src={getArtifactUrl(finding.evidence_id, 'manipulation_mask.png')}
+                  alt="Manipulation Mask"
                   className="w-full h-full object-contain"
                   onError={(e) => {
                     e.target.style.display = 'none';

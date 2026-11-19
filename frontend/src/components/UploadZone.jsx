@@ -47,7 +47,7 @@ export default function UploadZone({ onFilesSelected, isUploading, uploadProgres
         multiple
         className="hidden"
         onChange={handleFileChange}
-        accept=".jpg,.jpeg,.png,.webp,.mp4,.mov,.avi,.mkv,.wav,.mp3,.m4a,.flac,.txt"
+        accept=".jpg,.jpeg,.png,.webp,.mp4,.mov,.avi,.mkv,.wav,.mp3,.m4a,.flac,.aac,.txt,.pdf,.docx"
       />
 
       <div className="flex flex-col items-center justify-center space-y-3">
@@ -59,7 +59,7 @@ export default function UploadZone({ onFilesSelected, isUploading, uploadProgres
             Click to upload or drag & drop forensic evidence
           </p>
           <p className="text-xs text-slate-400 mt-1">
-            Multimodal formats: Images (JPG, PNG, WEBP), Videos (MP4, MOV), Audio (WAV, MP3, FLAC), Transcripts (TXT)
+            Multimodal formats: Images (JPG, PNG, WEBP), Videos (MP4, MOV), Audio (WAV, MP3, FLAC), Documents (TXT, PDF, DOCX)
           </p>
         </div>
 

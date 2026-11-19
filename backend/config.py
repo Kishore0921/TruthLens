@@ -18,8 +18,8 @@ OPENAI_DEFAULT_MODEL = os.getenv("OPENAI_DEFAULT_MODEL", "gpt-4o-mini")
 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv"}
-ALLOWED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".flac"}
-ALLOWED_TEXT_EXTENSIONS = {".txt"}
+ALLOWED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".flac", ".aac"}
+ALLOWED_TEXT_EXTENSIONS = {".txt", ".pdf", ".docx"}
 
 ALL_ALLOWED_EXTENSIONS = (
     ALLOWED_IMAGE_EXTENSIONS |

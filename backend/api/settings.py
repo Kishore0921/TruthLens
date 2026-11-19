@@ -27,7 +27,7 @@ def update_provider(
     db: Session = Depends(get_db)
 ):
     """Update provider settings and/or encrypt and save API key."""
-    if provider_id not in ["gemini", "openai"]:
+    if provider_id not in ["gemini", "openai", "anthropic", "huggingface"]:
         raise HTTPException(status_code=400, detail="Unsupported AI provider.")
     res = update_provider_config(
         db=db,

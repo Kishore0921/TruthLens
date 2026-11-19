@@ -5,10 +5,14 @@ from backend.models import AIProviderConfig, AIUsageLog
 from backend.ai.secret_manager import encrypt_secret, decrypt_secret, mask_secret
 from backend.ai.gemini_provider import GeminiProvider
 from backend.ai.openai_provider import OpenAIProvider
+from backend.ai.anthropic_provider import AnthropicProvider
+from backend.ai.huggingface_provider import HuggingFaceProvider
 
 _PROVIDERS = {
     "gemini": GeminiProvider(),
     "openai": OpenAIProvider(),
+    "anthropic": AnthropicProvider(),
+    "huggingface": HuggingFaceProvider(),
 }
 
 def get_provider_instance(provider_id: str):

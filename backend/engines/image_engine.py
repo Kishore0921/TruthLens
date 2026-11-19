@@ -1,12 +1,14 @@
 import uuid
 import os
 import json
+import cv2
 import numpy as np
 from PIL import Image, ImageStat
 from pathlib import Path
 from backend.schemas import Finding, EvidenceLocation
 from backend.config import PROCESSED_DIR
 from backend.forensic.metadata import extract_image_metadata
+from backend.forensic.hashing import compute_phash
 from backend.models_registry import ModelRegistry
 
 async def analyze_image(evidence_id: str, filepath: str, media_type: str) -> list[Finding]:
@@ -37,6 +39,7 @@ async def analyze_image(evidence_id: str, filepath: str, media_type: str) -> lis
     width, height = img.size
     img_format = img.format or "UNKNOWN"
     img_mode = img.mode
+    phash = compute_phash(filepath)
     
     findings.append(Finding(
         finding_id=str(uuid.uuid4()),
@@ -44,11 +47,11 @@ async def analyze_image(evidence_id: str, filepath: str, media_type: str) -> lis
         media_type="image",
         engine="image_properties",
         indicator="file_properties",
-        description=f"Confirmed image properties: {width}x{height} pixels, format={img_format}, mode={img_mode}, size={file_size:,} bytes",
-        location=EvidenceLocation(),
+        description=f"Confirmed image properties: {width}x{height} pixels, format={img_format}, mode={img_mode}, size={file_size:,} bytes, pHash={phash or 'N/A'}",
+        location=EvidenceLocation(region={"phash": phash, "width": width, "height": height}),
         model_score=None,
         confidence_band="high",
-        limitations=["Confirmed file header and container metadata only"]
+        limitations=["Confirmed file header, container metadata, and perceptual DCT hash"]
     ))
 
     # 2. Metadata & EXIF Analysis
@@ -177,6 +180,35 @@ async def analyze_image(evidence_id: str, filepath: str, media_type: str) -> lis
                 "ELA indicates compression surface discrepancies, NOT confirmed forgery",
                 "Different textures, edge density, and high-frequency patterns naturally produce varying error levels",
                 "Cannot distinguish between legitimate localized editing and synthetic insertion"
+            ]
+        ))
+
+        # Generate pixel-level localization mask
+        threshold = mean_diff + 2.5 * std_diff
+        mask = (np.mean(diff, axis=2) > threshold).astype(np.uint8) * 255
+        kernel = np.ones((5, 5), np.uint8)
+        cleaned_mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        cleaned_mask = cv2.dilate(cleaned_mask, kernel, iterations=1)
+        mask_path = processed_dir / "manipulation_mask.png"
+        cv2.imwrite(str(mask_path), cleaned_mask)
+        suspicious_pixel_ratio = float(np.sum(cleaned_mask > 0) / (cleaned_mask.size + 1e-6))
+
+        findings.append(Finding(
+            finding_id=str(uuid.uuid4()),
+            evidence_id=evidence_id,
+            media_type="image",
+            engine="manipulation_localization_engine",
+            indicator="localized_editing_mask",
+            description=(
+                f"Pixel-level manipulation localization computed. Isolated suspicious anomalous region coverage: {suspicious_pixel_ratio * 100:.2f}%. "
+                f"{'Localized spatial cluster detected; candidate inpainting, insertion, or localized edit mask generated.' if suspicious_pixel_ratio > 0.015 and variance_ratio > 2.5 else 'No concentrated localized anomaly cluster detected across pixel array.'}"
+            ),
+            location=EvidenceLocation(region={"suspicious_pixel_ratio": round(suspicious_pixel_ratio, 4), "has_mask": True}),
+            model_score=round(float(min(suspicious_pixel_ratio * 10.0, 1.0)), 3),
+            confidence_band="medium" if suspicious_pixel_ratio > 0.02 else "low",
+            limitations=[
+                "Pixel mask isolates high-frequency residual divergence; sharp text, high-contrast borders, and specular highlights can trigger localized mask regions",
+                "Mask indicates statistical divergence, not definitive semantic tampering"
             ]
         ))
     except Exception as e:

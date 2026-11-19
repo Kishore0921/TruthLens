@@ -7,6 +7,7 @@ from backend.api.investigations import router as inv_router
 from backend.api.uploads import router as upload_router
 from backend.api.analysis import router as analysis_router
 from backend.api.settings import router as settings_router
+from backend.api.providers import router as providers_router
 
 app = FastAPI(title="TruthLens", description="Multimodal Digital Forensics API", version="1.0.0")
 
@@ -22,6 +23,7 @@ app.include_router(inv_router)
 app.include_router(upload_router)
 app.include_router(analysis_router)
 app.include_router(settings_router)
+app.include_router(providers_router)
 
 @app.on_event("startup")
 def startup():

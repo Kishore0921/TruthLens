@@ -61,7 +61,9 @@ def init_db():
         from backend.config import GEMINI_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL
         for pid, name, model in [
             ("gemini", "Google Gemini", GEMINI_DEFAULT_MODEL),
-            ("openai", "OpenAI", OPENAI_DEFAULT_MODEL)
+            ("openai", "OpenAI", OPENAI_DEFAULT_MODEL),
+            ("anthropic", "Anthropic Claude", "claude-3-5-sonnet-20241022"),
+            ("huggingface", "Hugging Face Inference", "meta-llama/Llama-3.2-3B-Instruct")
         ]:
             existing = db.query(AIProviderConfig).filter(AIProviderConfig.id == pid).first()
             if not existing:
