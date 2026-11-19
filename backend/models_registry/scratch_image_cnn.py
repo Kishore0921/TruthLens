@@ -9,29 +9,40 @@ Weights: Trained from scratch on GenImage dataset (no pretrained transfer)
 Input Size: 128x128 RGB
 Task: AI-generated vs authentic camera image detection
 """
-import os
-import torch
 from pathlib import Path
 from typing import Optional, Any
 from PIL import Image
-from torchvision import transforms
+
+try:
+    import torch
+    from torchvision import transforms
+    TORCH_AVAILABLE = True
+except ImportError:
+    torch = None
+    transforms = None
+    TORCH_AVAILABLE = False
 
 from backend.models_registry.base_adapter import BaseModelAdapter, ModelPrediction
 
-MODEL_CHECKPOINT_PATH = Path("D:/Truthlens/image_model_training/models/truthlens_image_cnn.pth")
+BASE_DIR = Path(__file__).resolve().parents[2]
+MODEL_CHECKPOINT_PATH = BASE_DIR / "image_model_training" / "models" / "truthlens_image_cnn.pth"
 IMAGE_SIZE = 128
 
-_transform = transforms.Compose([
-    transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
+_transform = (
+    transforms.Compose([
+        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+    if TORCH_AVAILABLE
+    else None
+)
 
 
 class TruthLensScratchImageCNN(BaseModelAdapter):
     """
     Independent custom deep learning image classifier trained from scratch on GenImage.
-    Operates strictly on CPU or GPU with zero external cloud dependencies.
+    Gracefully skips local PyTorch execution on low-RAM cloud deployments.
     """
     def __init__(self):
         super().__init__(
@@ -55,6 +66,9 @@ class TruthLensScratchImageCNN(BaseModelAdapter):
         self._device = None
 
     def _load_model(self):
+        if not TORCH_AVAILABLE:
+            raise RuntimeError("PyTorch runtime disabled on lightweight cloud deployment")
+
         if self._model is not None:
             return self._model, self._device
 
@@ -73,6 +87,19 @@ class TruthLensScratchImageCNN(BaseModelAdapter):
         return self._model, self._device
 
     async def predict(self, evidence_path: str, metadata: Optional[dict[str, Any]] = None) -> ModelPrediction:
+        if not TORCH_AVAILABLE or not MODEL_CHECKPOINT_PATH.exists():
+            return ModelPrediction(
+                model_id=self.model_id,
+                version=self.version,
+                detection_task=self.detection_task,
+                score=None,
+                confidence_band="low",
+                indicator="model_unavailable",
+                description="Custom Scratch CNN skipped on lightweight cloud runtime; relying on signal/ELA and cloud AI adapters.",
+                details={"torch_available": TORCH_AVAILABLE, "weights_present": MODEL_CHECKPOINT_PATH.exists()},
+                limitations=["Local PyTorch runtime skipped to conserve server memory"]
+            )
+
         try:
             model, device = self._load_model()
             with Image.open(evidence_path) as img:
@@ -86,7 +113,6 @@ class TruthLensScratchImageCNN(BaseModelAdapter):
             real_score = float(probs[0].item())
             ai_score = float(probs[1].item())
 
-            # Assign confidence band based on score margin
             margin = abs(ai_score - real_score)
             if margin > 0.6:
                 confidence_band = "high"
