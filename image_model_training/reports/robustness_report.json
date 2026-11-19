@@ -1,0 +1,36 @@
+{
+  "model_name": "TruthLens Image CNN",
+  "model_version": "1.0",
+  "evaluation_samples": 200,
+  "results": [
+    {
+      "perturbation": "Baseline (Unaltered)",
+      "accuracy": 0.66,
+      "correct": 132,
+      "total": 200
+    },
+    {
+      "perturbation": "JPEG Compression (Q=50)",
+      "accuracy": 0.64,
+      "correct": 128,
+      "total": 200
+    },
+    {
+      "perturbation": "Spatial Downscaling (50% Bilinear)",
+      "accuracy": 0.565,
+      "correct": 113,
+      "total": 200
+    },
+    {
+      "perturbation": "Gaussian Blur (radius=2)",
+      "accuracy": 0.57,
+      "correct": 114,
+      "total": 200
+    }
+  ],
+  "conclusions": [
+    "Severe JPEG compression (Q=50) slightly degrades high-frequency synthetic texture discriminators.",
+    "Spatial downscaling reduces high-frequency artifact sharpness, shifting prediction distribution.",
+    "Gaussian blurring attenuates generative noise artifacts, demonstrating that uncalibrated model scores require secondary forensic corroboration."
+  ]
+}
